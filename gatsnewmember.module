@@ -1,0 +1,1389 @@
+<?php
+//$Id: gatsnewmember.module
+/**
+ * @file
+ *
+ * This is built on Drupal 6 using the Drupal Form API.
+ *
+ * This form is for adding new members into the GATS system.
+ *
+ */
+ define('DRUPAL_ROOT', getcwd());
+ require_once DRUPAL_ROOT . '/sites/default/civicrm.settings.php';
+ // require_once('E:/xampp/htdocs/drupal-7.59/sites/default/civicrm.settings.php');
+
+ /* Initialize CiviCRM so that API's can be used */
+ require_once ($civicrm_root.'/CRM/Core/Config.php');
+ $config =& CRM_Core_Config::singleton( );
+
+ /* Load the required CiviCRM APIs */
+ require_once($civicrm_root.'/api/v3/Contact.php');
+// require_once($civicrm_root.'/api/v3/Location.php');
+ require_once($civicrm_root.'/api/v3/Relationship.php');
+ require_once($civicrm_root.'/api/v3/RelationshipType.php');
+ require_once($civicrm_root.'/api/v3/Membership.php'); 
+
+ 
+ 
+/**
+ * Implement Drupal hook menu()
+ */
+function gatsnewmember_menu() 
+{
+	$items['newmember'] = array(
+		'title' => 'GATS New Member Registration',
+		'description' => 'New Member Registration',
+		'page callback' => 'drupal_get_form',
+		'page arguments' => array('gatsnewmember_form'),
+		//'access arguments' => array('new_member_registration'),
+		'access callback' => TRUE,
+	);
+	
+	return $items;
+}
+
+/**
+ * Implement Drupal perm menu() to have this modules permission in the permission administration
+ 
+function hook_perm() {
+  return array('gats_new_member');
+}
+*/
+
+
+/**
+ * Build Form to Collect New Registration Information
+ */
+function gatsnewmember_form($form_state) 
+{
+	$form = array();
+	
+	//button setters
+	$showNext = true;
+	$showBack = true;
+	$showSubmit = false;
+	
+	//if there are no indications of another page, default to personal
+	if (isset($form_state['storage']['showPage']))
+		$showPage=$form_state['storage']['showPage'];
+	else
+		$showPage='personalInfo';
+	
+	drupal_set_message(t('The page that should be shown: '.$showPage));
+	//obtain the form for the specific page to be displayed
+	//and determine if << Back and Next >> should be shown
+	if ($showPage=='personalInfo')
+	{
+		//display personal information page
+		$form = personal_info_page($form_state);
+		$showBack = false;
+	}
+	else if ($showPage=='contactInfo')
+	{
+		//display contact information page
+		$form =  contact_info_page($form_state);
+	}
+	else if ($showPage=='spouseInfo')
+	{
+		//display spouse information page
+		$form = spouse_info_page($form_state);
+	}
+	else if ($showPage=='childrenInfo')
+	{
+		//display children information page
+		$form = children_info_page($form_state);
+	}
+	else if ($showPage=='reviewPage')
+	{
+		//display review registration form page
+		$form = review_info_page($form_state); 
+		$showNext = false;
+		$showSubmit=true;
+	}
+	else if ($showPage=='confirmationPage')
+	{
+		//display registration confirmation page
+		$form = confirmation_page($form_state); 
+		$showNext = false;
+		$showSubmit=false;
+		$showBack = false;
+	}
+
+
+	//if this is not the first page in the flow
+    if ($showBack==true)
+    {
+  		$form['back'] = array(
+    		'#type' => 'submit',
+    		'#value' => '<< Back',
+    		'#name' => 'back',
+  		);
+  	}
+  	
+  	//if this is not the last page/review page
+  	if ($showNext==true)
+  	{
+  		$form['next'] = array(
+    		'#type' => 'submit',
+    		'#value' => 'Next >>',
+    		'#name' => 'next',
+  		);
+  	}
+	
+	//if this is the review and final submit
+	if ($showSubmit==true)
+	{
+		$form['submit'] = array(
+			'#type' => 'submit',
+			'#value'=> 'Submit',
+		);
+	}
+
+	return $form;
+}
+
+
+/**
+ * Function to Reset the page
+ */
+ function StartOver()
+ {
+	// Ensures fields are blank after the reset button is clicked.
+	unset($form_state['values']);
+	
+	// Ensures the reset button removes the new_name button.
+  	unset($form_state['storage']);
+  
+  	// Setting $form_state['rebuild'] = TRUE causes the default submit
+  	// function to be skipped and the form to be rebuilt.
+	$form_state['rebuild'] = TRUE;
+ }
+ 
+ /**
+ * Function to Next page
+ */
+ function GoBackOnePage()
+ {
+ 	//skip all validations - just go back
+ 	$form_state['rebuild'] = TRUE;
+ 	$form_state['storage']['showPage']='personalInfo';
+ }
+ 
+ 
+
+/**
+ * Validator for the PERSONAL INFO
+ */
+ function gatsnewmember_form_validate($form, &$form_state)
+ {
+	//we are not going to do any validation other than making sure that 
+	//required fields are properly populated, which is covered by the form
+ }
+
+/*
+ * Submit handler for the form PERSONAL INFO
+ */
+function gatsnewmember_form_submit($form, &$form_state)
+{
+	//action for where you are coming from
+	/*Typical flow is:
+	 *  1. Take values from form and place in storage
+	 *  2. Figure out next page based on button clicked
+	 *  3. Call rebuild or submit based on button/page
+	*/
+	
+	$currentPage = $form_state['values']['currentPage'];
+	$rebuild = 'true';
+	$clickedButton = $form_state['clicked_button']['#value'];
+	
+	drupal_set_message(t('The form has been submitted: '.$clickedButton));
+	//$form_state['storage']['showPage'] = 'contactInfo';
+	//drupal_set_message(t('Gender:  '.$form_state['values']['child2gender'].'Married:  '.$form_state['values']['married'].'  Children:  '.$form_state['values']['nbrChildren']));
+	drupal_set_message(t('The value of current page:  '.$currentPage));
+	//process the form values to cache
+	switch ($currentPage)
+	{	
+		case 'personalInfo':
+			
+			$form_state['storage']['personalInfoValues'] = $form_state['values'];
+		
+			//set variables to show or not to show pages for these
+			if (!$form_state['values']['married']==0)
+				$form_state['storage']['showSpouseInfo']='true';
+			else
+			{	
+				unset($form_state['storage']['showSpouseInfo']);
+				unset($form_state['storage']['spouseInfoValues']);
+			}	
+			if (!$form_state['values']['nbrChildren']==0)
+				$form_state['storage']['showChildren']=$form_state['values']['nbrChildren'];
+			else
+			{
+				unset($form_state['storage']['showChildren']);
+				unset($form_state['storage']['childrenInfoValues']);
+			}
+			break;
+		case 'contactInfo':
+		    $form_state['storage']['contactInfoValues'] = $form_state['values'];
+			break;
+		case 'spouseInfo':
+		    $form_state['storage']['spouseInfoValues'] = $form_state['values'];
+			break;			
+		case 'childrenInfo':
+		
+			//obtain # of children for person
+			$nbrChildren = 0;
+			if (isset($form_state['storage']['personalInfoValues']['nbrChildren']))
+				$nbrChildren = $form_state['storage']['personalInfoValues']['nbrChildren'];
+						
+			$record=0;
+			while ($record<$nbrChildren)
+			{
+				//for each child field set record the values in its own due to field duplications
+				$record=$record+1;
+				$child='child'.$record;
+			    $form_state['storage']['childrenInfoValues'] = $form_state['values'];
+			}//end while
+			break;		
+		case 'reviewPage':
+			//call function to store all information and display progress
+			if ($clickedButton == 'Submit')
+				process_submit($form_state);
+			break;
+	}
+    
+    //where do we go from here
+	if ($clickedButton == '<< Back')
+	{
+		$form_state['storage']['showPage'] = $form_state['values']['previousPage'];
+		$rebuild='true';
+	}
+	else if ($clickedButton == 'Next >>')
+	{
+		drupal_set_message(t('The next page should be not personalInfo'));
+		$form_state['storage']['showPage'] = $form_state['values']['nextPage'];
+		//$form_state['gatsnewmember']['showPage'].($form_state['values']['nextPage']);
+		$rebuild='true';
+		
+	}
+	else if ($clickedButton == 'Submit')
+	{
+		drupal_set_message(t('setting next page for Submit action'));
+		$form_state['storage']['showPage'] = $form_state['values']['nextPage'];
+		$rebuild='true';
+	}
+    
+    if ($rebuild=='true')
+    	$form_state['rebuild']=TRUE;
+    	//$form_state->setRebuild();
+    	//$form_state->setRebuild(TRUE);
+	
+	return;
+	
+}
+
+/**
+ * Form section to collect Contact Information
+ */
+function personal_info_page(&$form_state)
+{
+	$genderOptions = array('Male' => t('Male'), 'Female' => t('Female'));
+	
+	$form['instruction'] = array(
+		'#value' => 'Thank you for your interest in GATS!  This registration form will help you to register you and your family to become a GATS member. We will start by collecting some information about you and then determine other information required based on your response. So, let us get started!!  <br><br><b>*** If your family information is already in the system, you should not fill out this form.  If you just want to RENEW your existing membership, go to https://members.gatamilsangam.org/civicrm/contribute/transact?reset=1&id=1 ***.</b><br>',
+	);
+	
+	$form['currentPage'] = array(
+		'#type' => 'hidden',
+		'#default_value' => 'personalInfo',
+	);
+	
+	$form['nextPage'] = array(
+		'#type' => 'hidden',
+		'#default_value' => 'contactInfo',
+	);
+	
+	$form['personalInfo'] = array(
+		'#type' => 'fieldset',
+		'#title' => t('Tell us about yourself...'),
+		'#collapsible' => TRUE,
+	);
+
+	$form['personalInfo']['firstName'] = array(
+		'#title' => t('First Name'),
+		'#type' => 'textfield',
+		'#required' => TRUE,
+		'#size' => 20,
+		'#maxlength' => 30,
+		'#default_value' => !empty($form_state['storage']['personalInfoValues']['firstName']) ? $form_state['storage']['personalInfoValues']['firstName'] : '',
+	);
+	
+	$form['personalInfo']['middleName'] = array(
+		'#title' => t('Middle Name'),
+		'#type' => 'textfield',
+		'#required' => FALSE,
+		'#size' => 20,
+		'#maxlength' => 30,
+		'#default_value' => !empty($form_state['storage']['personalInfoValues']['middleName']) ? $form_state['storage']['personalInfoValues']['middleName'] : '',
+	);
+	
+	
+	$form['personalInfo']['lastName'] = array(
+		'#title' => t('Last Name'),
+		'#type' => 'textfield',
+		'#required' => TRUE,
+		'#size' => 20,
+		'#maxlength' => 30,
+		'#default_value' => !empty($form_state['storage']['personalInfoValues']['lastName']) ? $form_state['storage']['personalInfoValues']['lastName'] : '',
+	);
+
+	$form['personalInfo']['gender'] = array(
+		'#title' => t('Gender'),
+		'#type' => 'radios',
+		'#required' => FALSE,
+		'#options' => $genderOptions,	
+		'#default_value' =>  !empty($form_state['storage']['personalInfoValues']['gender']) ? $form_state['storage']['personalInfoValues']['gender'] : 'Male',
+	);
+	
+	$form['personalInfo']['married'] = array(
+		'#title' => t('Married'),
+		'#type' => 'checkbox',
+		'#required' => FALSE,
+		'#return_value' => 'yes', 
+      	'#default_value' => !empty($form_state['storage']['personalInfoValues']['married']) ? $form_state['storage']['personalInfoValues']['married'] : 0,		
+	);
+	
+	$form['personalInfo']['nbrChildren'] = array(
+		'#title' => t('Nbr of Children'),
+		'#required' => FALSE,
+		'#type' => 'select',
+		'#options' => array(
+			'0'=>t('0'),
+			'1'=>t('1'),
+			'2'=>t('2'),
+			'3'=>t('3'),
+			'4'=>t('4'),
+			'5'=>t('5'),
+		),
+		'#default_value' => !empty($form_state['storage']['personalInfoValues']['nbrChildren']) ? $form_state['storage']['personalInfoValues']['nbrChildren'] : '0',
+	);
+	
+	return $form;
+}
+
+
+/**
+ * Form section to collect Contact Information
+ */
+function contact_info_page(&$form_state) 
+{
+
+	$form['instruction'] = array(
+		'#value' => 'Tell us the manners in which we can contact you.  Our primary means of communication is by email (for newsletters and other membership related correspondences).  However, we would also like to have at least one telephone contact.  Your information is not shared with anyone else.',
+	);
+
+	//use this conditioning to determine next page
+	$nextPage='reviewPage';
+	if (isset($form_state['storage']['showSpouseInfo']))
+		$nextPage='spouseInfo';
+	else if (isset($form_state['storage']['showChildren']))
+		$nextPage='childrenInfo';
+	else
+		$nextPage='reviewPage';
+	
+	//indicate previous page; here it is a constant
+	$form['previousPage'] = array(
+		'#type' => 'hidden',
+		'#default_value' => 'personalInfo',
+	);
+	
+	$form['currentPage'] = array(
+		'#type' => 'hidden',
+		'#default_value' => 'contactInfo',
+	);
+	
+	$form['nextPage'] = array(
+		'#type' => 'hidden',
+		'#default_value' => $nextPage,
+	);
+	
+	$form['contactInfo'] = array(
+		'#type' => 'fieldset',
+		'#title' => t('Contact Information'),
+		'#collapsible' => TRUE,
+	);
+
+	$form['contactInfo']['emailAddress'] = array(
+		'#title' => t('Email Address'),
+		'#type' => 'textfield',
+		'#required' => TRUE,
+		'#size' => 30,
+		'#maxlength' => 40,
+		'#description' => t('email is required as it is a primary method of contact'),
+		'#default_value' => !empty($form_state['storage']['contactInfoValues']['emailAddress']) ? $form_state['storage']['contactInfoValues']['emailAddress'] : '',
+	);	
+	
+	$form['contactInfo']['homePhone'] = array(
+		'#title' => t('Home Phone'),
+		'#type' => 'textfield',
+		'#required' => FALSE,
+		'#size' => 15,
+		'#maxlength' => 15,
+		'#description' => t('area code + phone number'),
+		'#default_value' => !empty($form_state['storage']['contactInfoValues']['homePhone']) ? $form_state['storage']['contactInfoValues']['homePhone'] : '',
+	);
+	
+	$form['contactInfo']['mobilePhone'] = array(
+		'#title' => t('Mobile Phone'),
+		'#type' => 'textfield',
+		'#required' => FALSE,
+		'#size' => 15,
+		'#maxlength' => 15,
+		'#description' => t('area code + phone number'),
+		'#default_value' => !empty($form_state['storage']['contactInfoValues']['mobilePhone']) ? $form_state['storage']['contactInfoValues']['mobilePhone'] : '',
+	);		
+
+	/*
+	$form['address'] = array(
+		'#type' => 'fieldset',
+		'#title' => t('Where do you live..'),
+		'#collapsible' => TRUE,
+	);
+	*/
+	
+    $form['contactInfo']['label'] = array(
+		'#value' => '<h2>'.t('Address').'</h2>',
+	);
+
+	
+	$form['contactInfo']['address1'] = array(
+		'#title' => t('Address Line 1'),
+		'#type' => 'textfield',
+		'#required' => TRUE,
+		'#description' => t('Street number, street name, apartment/unit/suite - OR P.O. box'),
+		'#size' => 35,
+		'#maxlength' => 50,
+		'#default_value' => !empty($form_state['storage']['contactInfoValues']['address1']) ? $form_state['storage']['contactInfoValues']['address1'] : '',
+	);
+	
+	$form['contactInfo']['address2'] = array(
+		'#title' => t('Address Line 2'),
+		'#type' => 'textfield',
+		'#required' => FALSE,
+		'#description' => t('Supplemental address info, e.g. c/o, department name, building name, etc.'),
+		'#size' => 35,
+		'#maxlength' => 50,
+		'#default_value' => !empty($form_state['storage']['contactInfoValues']['address2']) ? $form_state['storage']['contactInfoValues']['address2'] : '',
+	);
+	
+	$form['contactInfo']['city'] = array(
+		'#title' => t('City'),
+		'#type' => 'textfield',
+		'#required' => TRUE,
+		'#size' => 15,
+		'#maxlength' => 20,
+		'#default_value' => !empty($form_state['storage']['contactInfoValues']['city']) ? $form_state['storage']['contactInfoValues']['city'] : '',
+	);
+	
+	$form['contactInfo']['state'] = array(
+		'#title' => t('State'),
+		'#type' => 'select',
+		'#options' => array(
+			'Alabama'=>t('Alabama'),
+			'Alaska'=>t('Alaska'),
+			'Arizona'=>t('Arizona'),
+			'Arkansas'=>t('Arkansas'),
+			'California'=>t('California'),
+			'Colorado'=>t('Colorado'),
+			'Connecticut'=>t('Connecticut'),
+			'Delaware'=>t('Delaware'),
+			'District of Columbia'=>t('District of Columbia'),
+			'Florida'=>t('Florida'),
+			'Georgia'=>t('Georgia'),
+			'Guam'=>t('Guam'),
+			'Hawaii'=>t('Hawaii'),
+			'Idaho'=>t('Idaho'),
+			'Illinois'=>t('Illinois'),
+			'Indiana'=>t('Indiana'),
+			'Iowa'=>t('Iowa'),
+			'Kansas'=>t('Kansas'),
+			'Kentucky'=>t('Kentucky'),
+			'Louisiana'=>t('Louisiana'),
+			'Maine'=>t('Maine'),
+			'Maryland'=>t('Maryland'),
+			'Massachusetts'=>t('Massachusetts'),
+			'Michigan'=>t('Michigan'),
+			'Minnesota'=>t('Minnesota'),
+			'Mississippi'=>t('Mississippi'),
+			'Missouri'=>t('Missouri'),
+			'Montana'=>t('Montana'),
+			'Nebraska'=>t('Nebraska'),
+			'Nevada'=>t('Nevada'),
+			'New Hampshire'=>t('New Hampshire'),
+			'New Jersey'=>t('New Jersey'),
+			'New Mexico'=>t('New Mexico'),
+			'New York'=>t('New York'),
+			'North Carolina'=>t('North Carolina'),
+			'North Dakota'=>t('North Dakota'),
+			'Ohio'=>t('Ohio'),
+			'Oklahoma'=>t('Oklahoma'),
+			'Oregon'=>t('Oregon'),
+			'Pennsylvania'=>t('Pennsylvania'),
+			'Puerto Rico'=>t('Puerto Rico'),
+			'Rhode Island'=>t('Rhode Island'),
+			'South Carolina'=>t('South Carolina'),
+			'South Dakota'=>t('South Dakota'),
+			'Tennessee'=>t('Tennessee'),
+			'Texas'=>t('Texas'),
+			'Utah'=>t('Utah'),
+			'Vermont'=>t('Vermont'),
+			'Virgin Islands'=>t('Virgin Islands'),
+			'Virginia'=>t('Virginia'),
+			'Washington'=>t('Washington'),
+			'West Virginia'=>t('West Virginia'),
+			'Wisconsin'=>t('Wisconsin'),
+			'Wyoming'=>t('Wyoming'),
+		),
+		'#default_value' => !empty($form_state['storage']['contactInfoValues']['state']) ? $form_state['storage']['contactInfoValues']['state'] : 'Georgia',
+	);
+	
+	$form['contactInfo']['postalCode'] = array(
+		'#title' => t('Zip Code'),
+		'#type' => 'textfield',
+		'#required' => TRUE,
+		'#size' => 15,
+		'#maxlength' => 10,
+		'#default_value' => !empty($form_state['storage']['contactInfoValues']['postalCode']) ? $form_state['storage']['contactInfoValues']['postalCode'] : '',
+	);
+	
+	return $form;
+}
+
+
+/**
+ * Form section to collect Spouse Information
+ */
+function spouse_info_page(&$form_state) 
+{
+	$form['instruction'] = array(
+		'#value' => 'You had indicated that you are married.  We want to have all of your family members in the system in order to facilitate event registration and admissions.  Please provide some basic information regarding your spouse.',
+	);
+
+	//use this conditioning to determine next page
+	$nextPage='reviewPage';
+	if (isset($form_state['storage']['showChildren']))
+		$nextPage='childrenInfo';
+	else
+		$nextPage='reviewPage';
+		
+		
+	$genderOptions = array('Male' => t('Male'), 'Female' => t('Female'));
+	
+	//indicate previous page; here it is a constant
+	$form['previousPage'] = array(
+		'#type' => 'hidden',
+		'#default_value' => 'contactInfo',
+	);
+	
+	$form['currentPage'] = array(
+		'#type' => 'hidden',
+		'#default_value' => 'spouseInfo',
+	);
+	
+	$form['nextPage'] = array(
+		'#type' => 'hidden',
+		'#default_value' => $nextPage,
+	);
+	
+	//default the last name as needed
+	$defaultLastName = '';
+	if (!empty($form_state['storage']['spouseInfoValues']['lastName']))
+		$defaultLastName = $form_state['storage']['spouseInfoValues']['lastName'];
+	else if (!empty($form_state['storage']['personalInfoValues']['lastName']))
+		$defaultLastName = $form_state['storage']['personalInfoValues']['lastName'];
+		
+	//default gender to be what was submitted previously and if not opposite to primary person
+	if (!empty($form_state['storage']['spouseInfoValues']['gender']))
+		$defaultGender = $form_state['storage']['spouseInfoValues']['gender'];
+	else if ($form_state['storage']['personalInfoValues']['gender']=='Male')
+		$defaultGender = 'Female';
+	else if ($form_state['storage']['personalInfoValues']['gender']=='Female')
+		$defaultGender = 'Male';
+	else
+		$defaultGender = 'Male';
+		
+	$form['spouseInfo'] = array(
+		'#type' => 'fieldset',
+		'#title' => t('Spouse Information'),
+		'#collapsible' => TRUE,
+	);
+
+	$form['spouseInfo']['firstName'] = array(
+		'#title' => t('First Name'),
+		'#type' => 'textfield',
+		'#required' => TRUE,
+		'#size' => 20,
+		'#maxlength' => 30,
+		'#default_value' => !empty($form_state['storage']['spouseInfoValues']['firstName']) ? $form_state['storage']['spouseInfoValues']['firstName'] : '',
+	);
+	
+	$form['spouseInfo']['middleName'] = array(
+		'#title' => t('Middle Name'),
+		'#type' => 'textfield',
+		'#required' => FALSE,
+		'#size' => 20,
+		'#maxlength' => 30,
+		'#default_value' => !empty($form_state['storage']['spouseInfoValues']['middleName']) ? $form_state['storage']['spouseInfoValues']['middleName'] : '',
+	);
+	
+	$form['spouseInfo']['lastName'] = array(
+		'#title' => t('Last Name'),
+		'#type' => 'textfield',
+		'#required' => TRUE,
+		'#size' => 20,
+		'#maxlength' => 30,
+		'#default_value' => $defaultLastName,
+	);
+
+	$form['spouseInfo']['gender'] = array(
+		'#title' => t('Gender'),
+		'#type' => 'radios',
+		'#required' => FALSE,
+		'#options' => $genderOptions,	
+		'#default_value' =>  $defaultGender,	
+	);
+	
+	$form['spouseInfo']['emailAddress'] = array(
+		'#title' => t('Email Address'),
+		'#type' => 'textfield',
+		'#required' => FALSE,
+		'#size' => 30,
+		'#maxlength' => 40,
+		'#default_value' => !empty($form_state['storage']['spouseInfoValues']['emailAddress']) ? $form_state['storage']['spouseInfoValues']['emailAddress'] : '',
+	);	
+	
+	$form['spouseInfo']['mobilePhone'] = array(
+		'#title' => t('Mobile Phone'),
+		'#type' => 'textfield',
+		'#required' => FALSE,
+		'#size' => 15,
+		'#maxlength' => 15,
+		'#default_value' => !empty($form_state['storage']['spouseInfoValues']['mobilePhone']) ? $form_state['storage']['spouseInfoValues']['mobilePhone'] : '',
+	);
+	
+	return $form;
+}
+
+/**
+ * Form section to collect Children Information
+ */
+function children_info_page(&$form_state) 
+{
+	$form['instruction'] = array(
+		'#value' => 'Now, tell us abour your children.  Again, this information is used for events and other GATS related purposes only.',
+	);
+	
+	//Birthdate field is utilized to determine qualifications for youth committee, volunteering, etc.,
+
+	//use this conditioning to determine next page
+	$previousPage='contactInfo';
+	$nextPage='reviewPage';
+	if (isset($form_state['storage']['showSpouseInfo']))
+		$previousPage='spouseInfo';
+
+	$genderOptions = array('Male' => t('Male'), 'Female' => t('Female'));
+	
+	//indicate previous page; here it is a constant
+	$form['previousPage'] = array(
+		'#type' => 'hidden',
+		'#default_value' => $previousPage,
+	);
+	
+	$form['currentPage'] = array(
+		'#type' => 'hidden',
+		'#default_value' => 'childrenInfo',
+	);
+	
+	$form['nextPage'] = array(
+		'#type' => 'hidden',
+		'#default_value' => $nextPage,
+	);
+	
+	//obtain # of children for person
+	$nbrChildren = 0;
+	if (isset($form_state['storage']['personalInfoValues']['nbrChildren']))
+		$nbrChildren = $form_state['storage']['personalInfoValues']['nbrChildren'];
+	
+	
+	$record=0;
+	while ($record<$nbrChildren)
+	{
+		$record=$record+1;
+		
+		$child='child'.$record;
+		
+		//default the last name as needed
+		$defaultLastName = '';
+		if (!empty($form_state['storage'][$child.'Values'][$child.'LastName']))
+			$defaultLastName = $form_state['storage'][$child.'Values'][$child.'LastName'];
+		else if (!empty($form_state['storage']['personalInfoValues']['lastName']))
+			$defaultLastName = $form_state['storage']['personalInfoValues']['lastName'];
+	
+		$form[$child] = array(
+			'#type' => 'fieldset',
+			'#title' => t('Child '.$record.' Information'),
+			'#collapsible' => TRUE,
+		);
+	
+		$form[$child][$child.'FirstName'] = array(
+			'#title' => t('First Name'),
+			'#type' => 'textfield',
+			'#required' => TRUE,
+			'#size' => 20,
+			'#maxlength' => 30,
+			'#default_value' => !empty($form_state['storage']['childrenInfoValues'][$child.'FirstName']) ? $form_state['storage']['childrenInfoValues'][$child.'FirstName'] : '',			
+		);
+		
+		$form[$child][$child.'MiddleName'] = array(
+			'#title' => t('Middle Name'),
+			'#type' => 'textfield',
+			'#required' => FALSE,
+			'#size' => 20,
+			'#maxlength' => 30,
+			'#default_value' => !empty($form_state['storage']['childrenInfoValues'][$child.'MiddleName']) ? $form_state['storage']['childrenInfoValues'][$child.'MiddleName'] : '',
+		);
+		
+		$form[$child][$child.'LastName'] = array(
+			'#title' => t('Last Name'),
+			'#type' => 'textfield',
+			'#required' => TRUE,
+			'#size' => 20,
+			'#maxlength' => 30,
+			'#default_value' => $defaultLastName,
+		);
+	
+		$form[$child][$child.'gender'] = array(
+			'#title' => t('Gender'),
+			'#type' => 'radios',
+			'#required' => FALSE,
+			'#options' => $genderOptions,	
+			'#default_value' =>  !empty($form_state['storage']['childrenInfoValues'][$child.'gender']) ? $form_state['storage']['childrenInfoValues'][$child.'gender'] : 'Male',	
+		);
+	/*
+		$form[$child][$child.'dob'] = array(
+			'#title' => t('Birth Date'),
+			'#type' => 'date',
+			'#required' => TRUE,	
+			'#default_value' => !empty($form_state['storage']['childrenInfoValues'][$child.'dob']) ? $form_state['storage']['childrenInfoValues'][$child.'dob'] : '',
+		);
+	*/
+	}
+	
+	return $form;
+}
+
+/**
+ * Form section to for Review Page
+ */
+function review_info_page(&$form_state) 
+{
+	//determine the previous page
+	$previousPage = 'contactInfo';
+	if (isset($form_state['storage']['showChildren']))
+		$previousPage='childrenInfo';
+	else if (isset($form_state['storage']['showSpouseInfo']))
+		$previousPage='spouseInfo';
+			
+	//indicate previous page; here it is a constant
+	$form['previousPage'] = array(
+		'#type' => 'hidden',
+		'#default_value' => $previousPage,
+	);
+		
+	$form['currentPage'] = array(
+		'#type' => 'hidden',
+		'#default_value' => 'reviewPage',
+	);
+	
+	$form['nextPage'] = array(
+		'#type' => 'hidden',
+		'#default_value' => 'confirmationPage',
+	);
+	
+	$form['instructions'] = array(
+		'#value' => 'You are almost there!!  Please confirm the information summarized below.  Click the BACK button at the bottom to go back and make corrections.  If there are no corrections to make, answer the simple math problem below and click the Submit button to register.',
+	);
+	
+	$form['personTable'] = array(
+		'#value' => '<table>',
+	);
+	
+	$form['personRowData'] = array(
+		'#value' => '<tr><td>',
+	);	
+	
+	$form['personTitle'] = array(
+		'#type' => 'item',
+		'#title' => '',
+		'#value' => '<h2><u>Your Information</u></h2>',
+	);
+	
+	$form['personName'] = array(
+		'#type' => 'item',
+		'#title' => 'Name',
+		'#value' => $form_state['storage']['personalInfoValues']['firstName'].' '.$form_state['storage']['personalInfoValues']['middleName'].' '.$form_state['storage']['personalInfoValues']['lastName'],
+	);
+	
+	$form['personGender'] = array(
+		'#type' => 'item',
+		'#title' => 'Gender',
+		'#value' => $form_state['storage']['personalInfoValues']['gender'],
+	);
+
+	$address = $form_state['storage']['contactInfoValues']['address1'];
+	if (!empty($form_state['storage']['contactInfoValues']['address2']))
+		$address=$address.'<br>'.$form_state['storage']['contactInfoValues']['address2'];
+	$address = $address.'<br>'.$form_state['storage']['contactInfoValues']['city'].', '.$form_state['storage']['contactInfoValues']['state'].'  '.$form_state['storage']['contactInfoValues']['postalCode'];
+	
+	$form['personAddress'] = array(
+		'#type' => 'item',
+		'#title' => 'Address',
+		'#value' => $address,
+	);
+
+	$form['personPhone'] = array(
+		'#type' => 'item',
+		'#title' => 'Phone',
+		'#value' => 'Home:  '.$form_state['storage']['contactInfoValues']['homePhone'].'<br>'.'Mobile:  '.$form_state['storage']['contactInfoValues']['mobilePhone'],
+	);
+	
+	$form['personEmail'] = array(
+		'#type' => 'item',
+		'#title' => 'Email Address',
+		'#value' => $form_state['storage']['contactInfoValues']['emailAddress'],
+	);
+	
+	$form['endPersonRowData'] = array(
+		'#value' => '</td></tr>',
+	);
+	
+	$form['endPersonTable'] = array(
+		'#value' => '</table>',
+	);	
+
+	if (!empty($form_state['storage']['showSpouseInfo']))
+	{
+		$form['spouseTable'] = array(
+			'#value' => '<table>',
+		);
+		
+		$form['spouseRowData'] = array(
+			'#value' => '<tr><td>',
+		);	
+				
+		$form['spouseTitle'] = array(
+			'#type' => 'item',
+			'#title' => '',
+			'#value' => '<h2><u>Spouse Information</u></h2>',
+		);
+		
+		$form['spouseName'] = array(
+			'#type' => 'item',
+			'#title' => 'Name',
+			'#value' => $form_state['storage']['spouseInfoValues']['firstName'].' '.$form_state['storage']['spouseInfoValues']['middleName'].' '.$form_state['storage']['spouseInfoValues']['lastName'],
+		);
+
+		$form['spousePhone'] = array(
+			'#type' => 'item',
+			'#title' => 'Phone',
+			'#value' => 'Mobile:  '.$form_state['storage']['spouseInfoValues']['mobilePhone'],
+		);	
+		
+		$form['spouseEmail'] = array(
+			'#type' => 'item',
+			'#title' => 'Email',
+			'#value' => $form_state['storage']['spouseInfoValues']['emailAddress'],
+		);	
+	
+		$form['endSpouseRowData'] = array(
+			'#value' => '</td></tr>',
+		);
+	
+		$form['endSpouseTable'] = array(
+			'#value' => '</table>',
+		);
+	}//end if show spouse
+
+	if (isset($form_state['storage']['showChildren']))
+	{
+		$nbrChildren = $form_state['storage']['showChildren'];
+		
+		$form['beginChildrenTable'] = array(
+			'#value' => '<table>',
+		);	
+		$form['beginChildrenHeading'] = array(
+			'#value' => '<tr col="'.$nbrChildren.'"><td>',
+		);
+		
+		$form['childTitle'] = array(
+			'#type' => 'item',
+			'#title' => '',
+			'#value' => '<h2><u>Children Information</u></h2>',
+		);
+		
+		$form['endChildrenHeading'] = array(
+			'#value' => '</td></tr>',
+		);
+		
+		$form['beginChildren1'] = array(
+			'#value' => '<tr>',
+		);
+		
+		$record=0;
+		while ($record<$nbrChildren)
+		{
+			$record=$record+1;
+			$child='child'.$record;
+				
+			$form['beginChild'.$record] = array(
+				'#value' => '<td>',
+			);
+			
+			$form[$child.'Name'] = array(
+				'#type' => 'item',
+				'#title' => 'Name',
+				'#value' => $form_state['storage']['childrenInfoValues'][$child.'FirstName'].' '.$form_state['storage']['childrenInfoValues'][$child.'MiddleName'].' '.$form_state['storage']['childrenInfoValues'][$child.'LastName'],
+			);
+			
+			$form[$child.'Gender'] = array(
+				'#type' => 'item',
+				'#title' => 'Gender',
+				'#value' => $form_state['storage']['childrenInfoValues'][$child.'gender'],
+			);	
+			
+			/*
+			$form[$child.'Dob'] = array(
+				'#type' => 'item',
+				'#title' => 'Birth Date',
+				//'#value' => date(m/d/Y,$form_state['storage']['childrenInfoValues'][$child.'dob']),
+			);
+			*/	
+		
+			$form['endChild'.$record] = array(
+				'#value' => '</td>',
+			);	
+		
+		}//end while loop
+		
+		$form['endChildrenTable'] = array(
+			'#value' => '</tr></table>',
+		);
+	
+	}//end if show children
+	
+	$form['my_captcha_element'] = array(
+    	'#type' => 'captcha',
+   		'#captcha_type' => 'captcha/Math',
+  	);
+	
+	
+	return $form;
+}
+
+/**
+ * Form section to for Review Page
+ */
+function confirmation_page(&$form_state) 
+{
+	drupal_set_message(t('in the confirmation_page operation'));
+	$form['confirm'] = array(
+		'#value' => '<br><br><h2><u>Confirmation</u></h2><br>Thank you for your registration.  Your family information has been saved.<br><br><h2><u>User Accounts</u></h2><br>User accounts have also been created for you (and spouse if email provided).  Username has been defaulted to the email address(s) provided and the password has been defaulted to your zipcode entered twice (ie, 1234512345).  You may change the username or the password anytime you wish.<br><br><h2><u>Next Step:  Membership Payment</u></h2><br>The next step is the selection and payment for your membership.  You do not have to login - just use the same email address that you provided when you registered.  <a href="https://members.gatamilsangam.org/civicrm/contribute/transact?reset=1&id=7">CLICK HERE TO START PAYMENT PROCESS</a>.  **NOTE:  If you had already paid for your membership and you were recently solicited to provide this information, you DO NOT have to pay again.**',
+	);
+	
+	/*
+	$form['confirm'] = array(
+		'#value' => '<b>Family Record:  $form_state['storage']['externalIdentifier']</b>',
+	);
+	
+	
+	$form['login'] = array(
+		'#value' => '<b>Login:  MyLogin</b>',
+	);
+	
+	$form['pmtInstrctions'] = array(
+		'#value' => '<p><b>The next step is the selection and payment for your membership.  Please click the </b></p>',
+	);
+	*/
+	
+	
+	
+	return $form;
+
+}
+
+
+/**
+ * Form section to for Review Page
+ */
+function process_submit(&$form_state) 
+{
+	
+	$processLog = 'in process_submit';
+
+	//create address params to prepare for save; all contacts will utilize this
+	//location_type_id=1 means for HOME
+    $address = array (1 => array( 	'location_type_id'      => 1,
+    								'street_address'        => $form_state['storage']['contactInfoValues']['address1'],
+                	   			  	'supplemental_address_1'=> $form_state['storage']['contactInfoValues']['address2'], 
+                	   				'city'                	=> $form_state['storage']['contactInfoValues']['city'],
+                	   				'state_province'        => $form_state['storage']['contactInfoValues']['state'],
+                	   				'postal_code'           => $form_state['storage']['contactInfoValues']['postalCode'],
+                	   				'country'               => 'United States',
+                       				'is_primary'             => 1                	    
+                   				));
+                   
+	//create home phone array if one was provided
+	if (isset($form_state['storage']['contactInfoValues']['homePhone']))
+	{ 
+    	$homePhone = array( 'phone'         	=> $form_state['storage']['contactInfoValues']['homePhone'],
+                        'phone_type_id' 	=> 1,
+                        'is_primary'    	=> 1,
+                        'location_type_id' 	=> 1
+                      );
+	};
+
+	//create primary phone array if one was provided
+	if (isset($form_state['storage']['contactInfoValues']['mobilePhone']))
+	{
+		$primaryMobilePhone = array( 'phone'         => $form_state['storage']['contactInfoValues']['mobilePhone'],
+                        		 'phone_type_id' => 2,
+                        		 'is_primary'    => 0,
+                        		 'location_type_id' => 1
+                      );
+    }   
+    
+    if (isset($form_state['storage']['contactInfoValues']['spousePhone']))
+    {
+   		$spouseMobilePhone = array( 'phone'         => $form_state['storage']['spouseInfoValues']['mobilePhone'],
+                       			'phone_type_id'	=> 2,
+                        		'is_primary'    => 0,
+                        		'location_type_id' => 1
+                      );    
+	}
+	
+	//prepare phone arrays for storing
+	$homePhones = array();       
+	$primaryPhones = array();
+	$spousePhones = array();                    
+	if (isset($homePhone))
+	{
+		array_push($homePhones, $homePhone);
+		array_push($primaryPhones, $homePhone);
+		array_push($spousePhones, $homePhone);
+	}	
+
+	if (isset($primaryMobilePhone))
+		array_push($primaryPhones, $primaryMobilePhone);
+	
+	if (isset($spouseMobilePhone))
+		array_push($spousePhones, $spouseMobilePhone); 
+		
+
+	//ADD THE HOUSEHOLD CONTACT AND GET ID
+	$householdSuccess = true;
+	$familyName = $form_state['storage']['personalInfoValues']['firstName'].' '.$form_state['storage']['personalInfoValues']['lastName'].' '.'Family';
+	
+	$householdParams = array(
+                        'household_name' => $familyName,
+                        'contact_type'   => 'Household',
+                        'email'          => $form_state['storage']['contactInfoValues']['emailAddress']
+                        );
+	
+	$householdContact =& civicrm_contact_add($householdParams);
+	
+	if ($householdContact['is_error']==1)
+	{
+    	$processLog = $processLog.'ERROR saving household data:  '.$householdContact['error_message'].'\n';
+    	$householdSuccess = false;
+    }
+    else
+    {
+	
+	    $processLog = $processLog.'SUCCESS saving household data'.'\n';
+	    
+		//generate an external identifer combining year and the newly created contact_id for uniqueness
+		$externalIdentifier = date('Y').'-'.$householdContact['contact_id'];
+		$form_state['storage']['externalIdentifier']=$externalIdentifier;		
+		
+		//update household contact just created to add the external identifier
+		$householdUpdateParams = array(
+	                        'contact_id' => $householdContact['contact_id'],
+	                        'household_name' => $familyName,
+	                        'external_identifier'   => $externalIdentifier
+	    					);
+	    
+	    $householdUpdateContact =& civicrm_contact_update($householdUpdateParams);
+		
+		//ADD THE ADDRESS AND ATTACH TO HOUSE CONTACT
+		$householdLocationParams = array(	'contact_id' => $householdContact['contact_id'],
+	                   	 	    	'address'   		 => $address,
+	                   	 	    	'phone'    			 => $homePhones,
+	                   	 	    	'location_type_id'	 => 1
+	                       	);
+	  /* 
+	    $householdLocation =& civicrm_location_add($householdLocationParams);
+	    if ($householdLocation['is_error']==1)
+	    	$processLog = $processLog.'ERROR saving household contact data:  '.$householdLocation['error_message'].'\n';
+	    else
+	    	$processLog = $processLog.'SUCCESS saving household contact data'.'\n';
+           */
+	}    
+
+    //Array to keep up list of relationships to add
+    $relationStack = array();  
+
+    if ($householdSuccess)
+    {    
+		//ADD THE PRIMARY CONTACT AND ATTACH TO HOUSE ADDRESS - GET CONTACT ID	
+	    $primaryParams = array(
+	                        'first_name'            => $form_state['storage']['personalInfoValues']['firstName'],
+	                        'last_name'             => $form_state['storage']['personalInfoValues']['lastName'], 
+	                        'middle_name'           => $form_state['storage']['personalInfoValues']['middleName'],
+	                        'contact_type'          => 'Individual',
+	                        'email'                 => $form_state['storage']['contactInfoValues']['emailAddress'],
+	                        'external_identifier'   => $externalIdentifier.'-P',
+	                        'gender_id'             => $form_state['storage']['personalInfoValues']['gender'],
+	                        'mail_to_household_id'  => $householdContact['contact_id'],
+	                        'use_household_address' => 1
+	                        );
+	                        
+		$primaryContact =& civicrm_contact_add($primaryParams);
+		if ($primaryContact['is_error']==1)
+	    	$processLog = $processLog.'ERROR saving primary data:  '.$primaryContact['error_message'].'\n';
+	    else
+	    {
+	    	$processLog = $processLog.'SUCCESS saving primary data'.'\n';
+			array_push($relationStack, $primaryContact['contact_id']);
+				
+			//ADD THE phones AND ATTACH TO primary CONTACT
+			$primaryLocationParams = array(	'contact_id' => $primaryContact['contact_id'],
+									'address' 		 => $address,
+	                        		'phone'		 	 => $primaryPhones,
+	                        		'location_type_id'=>1
+	                       	);                      
+	    
+	    	$primaryLocation =& civicrm_location_add($primaryLocationParams);
+			if ($primaryLocation['is_error']==1)
+	    		$processLog = $processLog.'ERROR saving primary location data:  '.$primaryLocation['error_message'].'\n';
+	    	else
+	    		$processLog = $processLog.'SUCCESS saving primary location data'.'\n';
+	    }//end else primary
+	}
+    
+
+	//ADD THE SECONDARY CONTACT AND ATTACH TO HOUSE ADDRESS - GET CONTACT ID	    
+	if ($householdSuccess && isset($form_state['storage']['showSpouseInfo']))
+	{                
+    	$spouseParams = array(
+                        'first_name'            => $form_state['storage']['spouseInfoValues']['firstName'],
+                        'last_name'             => $form_state['storage']['spouseInfoValues']['lastName'], 
+                        'middle_name'           => $form_state['storage']['spouseInfoValues']['middleName'],
+                        'contact_type'          => 'Individual',
+                        'email'                 => $form_state['storage']['spouseInfoValues']['emailAddress'],
+                        'external_identifier'   => $externalIdentifier.'-S',
+                        'gender_id'             => $form_state['storage']['spouseInfoValues']['gender'],
+                        'mail_to_household_id'  => $householdContact['contact_id'],
+                        'use_household_address' => 1
+                        );
+                        
+		$spouseContact =& civicrm_contact_add($spouseParams); 
+		if ($spouseContact['is_error']==1)
+    		$processLog = $processLog.'ERROR saving spouse data:  '.$spouseContact['error_message'].'\n';
+    	else
+    	{
+    		$processLog = $processLog.'SUCCESS saving spouse data'.'\n'; 
+    		array_push($relationStack, $spouseContact['contact_id']); 
+    		                       
+    	
+	    	//ADD THE phones AND ATTACH TO primary CONTACT  
+			$spouseLocationParams = array(	'contact_id' => $spouseContact['contact_id'],
+									'address' 		 => $address,
+                        			'phone'		 => $spousePhones ,
+                        			'location_type_id'=>1
+                       	);
+    
+    		$spouseLocation =& civicrm_location_add($spouseLocationParams);
+    		if ($spouseLocation['is_error']==1)
+    			$processLog = $processLog.'ERROR saving spouse location data:  '.$spouseLocation['error_message'].'\n';
+    		else
+    			$processLog = $processLog.'SUCCESS saving spouse location data'.'\n';
+    	}//end else
+    }//end spouse addition
+    
+    //if children data is present, we process them here one by one
+    if ($householdSuccess && isset($form_state['storage']['showChildren']))
+    {                 
+    	$nbrChildren = $form_state['storage']['showChildren'];
+    	
+    	$record=0;
+		while ($record<$nbrChildren)
+		{
+			$record=$record+1;
+			$child='child'.$record;
+    	    	
+	    	//ADD THE CHILD CONTACT AND ATTACH TO HOUSE ADDRESS - GET CONTACT ID                    
+	    	$childParams = array(
+	                        'first_name'            => $form_state['storage']['childrenInfoValues'][$child.'FirstName'],
+	                        'last_name'             => $form_state['storage']['childrenInfoValues'][$child.'LastName'], 
+	                        'middle_name'  			=> $form_state['storage']['childrenInfoValues'][$child.'MiddleName'],
+	                        'contact_type'          => 'Individual',
+	                        'external_identifier'   => $externalIdentifier.'-C'.$record,
+	                        'gender_id'    			=> $form_state['storage']['childrenInfoValues'][$child.'gender'],
+	                        //'birth_date'   			=> '2001-01-21', 
+	                        'mail_to_household_id'  => $householdContact['contact_id'],
+	                        'use_household_address' => 1              
+	                        );
+	                        //array('d'=>'10','M'=>'1','Y'=>'2008'),
+	                        
+	    	$childContact =& civicrm_contact_add($childParams);
+	   	
+	   		if ($childContact['is_error']==1)
+    			$processLog = $processLog.'ERROR saving child '.$record.' data:  '.$childContact['error_message'].'\n';
+    		else
+    		{
+    			$processLog = $processLog.'SUCCESS saving child '.$record.' data'.'\n';
+				array_push($relationStack, $childContact['contact_id']);
+			
+	    	
+		    	//add the address so that we can link to household address 
+				$childLocationParams = array(	'contact_id' => $childContact['contact_id'],
+										'address' 		 => $address,
+	                        			'location_type_id'=>1
+	                       	);
+	            
+	    		$childLocation =& civicrm_location_add($childLocationParams);
+	    		if ($childLocation['is_error']==1)
+    				$processLog = $processLog.'ERROR saving child '.$record.' location data:  '.$childLocation['error_message'].'\n';
+    			else
+    				$processLog = $processLog.'SUCCESS saving child '.$record.' location data'.'\n';
+	    		
+	    	}//end if
+	    }//end while
+	}//end if children
+/*
+	if ($householdSuccess)
+	{
+		//for each contact, link their address to household address
+		$updRecord = 0;
+		$nbrHouseholdMembers = count($relationStack);
+		while ($updRecord<$nbrHouseholdMembers)
+		{
+			echo "Now updating record ".$updRecord." for contact ". $relationStack[$updRecord]."    --  ";
+		    $primaryUpdateParams  = array(
+	                        'contact_id'            => $relationStack[$updRecord],
+	                        'mail_to_household_id'  => $householdContact['contact_id'],
+	                        'use_household_address' => 1
+	                        );
+	    	$primaryUpdate = & civicrm_contact_update($primaryUpdateParams);
+	    	if ($primaryUpdate['is_error']==1)
+	    		$processLog = $processLog.'ERROR linking contact address for contact_id '.$relationStack[$updRecord].': '.$primaryUpdate['error_message'].'\n';
+	    	else
+	    		$processLog = $processLog.'SUCCESS linking contact addresss for contact_id'.$relationStack[$updRecord].'\n';
+	    	
+	    	$updRecord=$updRecord+1;
+	    }//end while    
+	}
+	*/
+	
+	if ($householdSuccess)
+	{
+	    //For each contact, add relationship to the Household CONTACT
+	    //primary contact-->household
+	    $householdMemberRelId=7; //Household Member is
+	    $relRecord=0;
+	    $nbrRelations = count($relationStack);
+		while ($relRecord<$nbrRelations)
+		{
+			//for each contactId in relationship stack, set householdmember relationship
+		    $relParams = array(
+	                   'contact_id_a'         => $relationStack[$relRecord],
+	                   'contact_id_b'         => $householdContact['contact_id'],
+	                   'relationship_type_id' => $householdMemberRelId,
+	                   'is_active'            => 1,
+	                   'is_permission_a_b'    => 1,
+	                   'is_permission_b_a'    => 1
+	                   );
+	                   
+	        $relationship = civicrm_relationship_create( $relParams );
+	        if ($relationship['is_error']==1)
+	    		$processLog = $processLog.'ERROR adding relationship for contact_id '.$relationStack[$relRecord].': '.$relationship['error_message'].'\n';
+	    	else
+	    		$processLog = $processLog.'SUCCESS adding relationship for contact_id'.$relationStack[$relRecord].'\n';
+	    	
+	        $relRecord=$relRecord+1;     
+		
+		}//end while
+	}
+	
+	
+	//Add membership to the family at pending status if this is for family
+	//This is for family if more than one person is in the relationStack
+	if ($householdSuccess && count($relationStack)>1)
+	{
+	    $mbrParams = array(
+	                'contact_id'         => $householdContact['contact_id'],  
+	                'membership_type_id' => 3,
+	                'join_date'          => '2016-01-01',
+	                'start_date'          => '2016-01-01',
+	                'source'             => 'Self-Registration',
+	                'is_override'        => 1,
+	                'status_id'          => 5
+	                );
+	    $mbrResult = civicrm_contact_membership_create( $mbrParams );
+	    if ($mbrResult['is_error']==1)
+	    	$processLog = $processLog.'ERROR adding membership for household id '.$householdContact['contact_id'].': '.$mbrResult['error_message'].'\n';
+	    else
+	    	$processLog = $processLog.'SUCCESS adding relationship for contact_id'.$householdContact['contact_id'].'\n';
+	}    	    
+	
+
+	/***************CREATE DRUPAL USER FOR PRIMARY*******************/
+	  //set up the user fields using a random 8 character password
+	  $fields = array(
+	    'name' => $form_state['storage']['contactInfoValues']['emailAddress'],
+	    'mail' => $form_state['storage']['contactInfoValues']['emailAddress'],
+	    'pass' => $form_state['storage']['contactInfoValues']['postalCode'].$form_state['storage']['contactInfoValues']['postalCode'],
+	    'status' => 1,
+	  );
+	 
+	  //the first parameter is left blank so a new user is created
+	  $account = user_save('', $fields);
+	/***************END CREATE DRUPAL USER PRIMARY*******************/
+	
+	/***************CREATE DRUPAL USER FOR SPOUSE*******************/
+	if (isset($form_state['storage']['showSpouseInfo']) && isset($form_state['storage']['spouseInfoValues']['emailAddress']))
+	{
+	  //set up the user fields using a random 8 character password
+	  $fieldsSpouse = array(
+	    'name' => $form_state['storage']['spouseInfoValues']['emailAddress'],
+	    'mail' => $form_state['storage']['spouseInfoValues']['emailAddress'],
+	    'pass' => $form_state['storage']['contactInfoValues']['postalCode'].$form_state['storage']['contactInfoValues']['postalCode'],
+	    'status' => 1,
+	  );
+	 
+	  //the first parameter is left blank so a new user is created
+	  $accountSpouse = user_save('', $fieldsSpouse);
+	}
+	/***************END CREATE DRUPAL USER SPOUSE*******************/
+	
+	
+	
+	drupal_set_message(t($processLog));
+}
+
+
+
+
+
+
+

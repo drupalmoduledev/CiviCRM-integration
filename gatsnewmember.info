@@ -1,0 +1,6 @@
+name = "GATS New Member Registration"
+description = "Custom Form for GATS New Members"
+core = 7.x
+dependencies[] = civicrm
+package = CiviCRM 
+version = 1.0
